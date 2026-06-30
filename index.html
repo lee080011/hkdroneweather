@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drone weather</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="favicon_io/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon_io/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon_io/favicon-16x16.png">
+    <link rel="android-chrome-192x192" sizes="192x192" href="favicon_io/android-chrome-192x192.png">
+    <link rel="android-chrome-512x512" sizes="512x512" href="favicon_io/android-chrome-512x512.png">
+    <link rel="manifest" href="/site.webmanifest">
+    
+    <!-- Leaflet 的 CSS 和 JS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<div class="navbar">
+    <div class="brand">航拍Drone</div>
+    <div class="nav-tabs">
+        <button class="tab-btn active" onclick="switchTab('map-page')">航拍地圖</button>
+        <button class="tab-btn" onclick="switchTab('laws-page')">各國法例</button>
+        <button class="tab-btn" onclick="switchTab('itinerary-page')">行程天氣</button>
+    </div>
+</div>
+
+<div id="map-page" class="tab-content active">
+    <div class="search-container">
+        <input type="text" id="search-input" class="search-input" placeholder="輸入地點">
+        <button class="search-btn" onclick="searchLocation()">搜尋</button>
+    </div>
+    
+    <div id="map"></div>
+    <div class="locate-btn" onclick="geolocateUser()">我的位置</div>
+</div>
+
+<div id="laws-page" class="tab-content placeholder-page">
+    <h2 style="color: #007aff; margin-bottom: 15px; margin-top: 0;">📜 各國航拍法例快速對照</h2>
+    <p style="color: #666; font-size: 14px;">出發外遊航拍前，請先選擇國家或地區查看當地基本核心法規：</p>
+    
+    <select id="country-select" onchange="showDroneLaws()" style="padding: 12px; font-size: 15px; border-radius: 8px; width: 100%; max-width: 320px; margin-bottom: 20px; outline: none; border: 1px solid #ccc; font-weight: bold; background: #fff; cursor: pointer;">
+        <option value="">-- 請選擇國家 / 地區 --</option>
+        <option value="hk">香港 (Hong Kong)</option>
+        <option value="jp">日本 (Japan)</option>
+        <option value="tw">台灣 (Taiwan)</option>
+        <option value="uk">英國 (United Kingdom)</option>
+    </select>
+
+    <div id="laws-display" style="background: #f8f9fa; border-left: 5px solid #007aff; padding: 20px; border-radius: 0 8px 8px 0; line-height: 1.7; display: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+        </div>
+</div>
+
+<div id="itinerary-page" class="tab-content placeholder-page">
+    <h2>✈️ 未來航拍行程</h2>
+    <div id="itinerary-content"></div>
+    <h1>Come soon!</h1>
+</div>
+    <style>
+        body, html { margin: 0; padding: 0; height: 100%; width: 100%; }
+        #map { height: 100%; width: 100%; }
+        
+        /* 定位按鈕樣式 */
+        .locate-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000; /* Leaflet 的 z-index 較高，按鈕要設大一點 */
+            background: white;
+            padding: 15px 18px;
+            border-radius: 6px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            cursor: pointer;
+            font-weight: bold;
+            font-family: sans-serif;
+        }
+        /* === 新增：分頁與搜尋欄樣式 === */
+body, html { display: flex; flex-direction: column; }
+.navbar { background: #1c1c1e; color: white; display: flex; padding: 10px 20px; align-items: center; z-index: 2000; }
+.brand { font-size: 18px; font-weight: bold; margin-right: 30px; }
+.nav-tabs { display: flex; gap: 10px; }
+.tab-btn { background: none; border: none; color: #aaa; padding: 8px 16px; font-size: 14px; cursor: pointer; border-radius: 6px; font-weight: bold; transition: 0.2s; }
+.tab-btn:hover { color: white; background: #2c2c2e; }
+.tab-btn.active { color: white; background: #007aff; }
+
+/* 分頁內容控制 */
+.tab-content { flex: 1; position: relative; display: none; padding: 0; margin: 0; }
+.tab-content.active { display: block; }
+.placeholder-page { padding: 30px; color: #333; }
+
+/* 地圖左上角搜尋欄 */
+.search-container { position: absolute; top: 20px; left: 50px; z-index: 1000; display: flex; background: white; padding: 6px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.search-input { border: 1px solid #ccc; padding: 8px 12px; border-radius: 4px; width: 180px; font-size: 14px; outline: none; }
+.search-btn { background: #007aff; color: white; border: none; padding: 8px 14px; margin-left: 6px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+/* 🌟 核心修正：強制網頁、分頁容器同地圖都維持 100% 填滿高度 🌟 */
+html, body { 
+    height: 100% !important; 
+    width: 100% !important; 
+    margin: 0; 
+    padding: 0; 
+}
+
+#map-page {
+    height: 100%;
+    width: 100%;
+}
+
+#map { 
+    height: 100% !important; 
+    width: 100% !important; 
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1; /* 確保地圖喺最底層 */
+}
+
+/* 確保定位掣同搜尋欄浮喺地圖上面 */
+.search-container { z-index: 1000 !important; }
+.locate-btn { z-index: 700 !important; }
+</style>
+</head>
+<body>
+
+<script>
+    // 2. 初始化地圖
+    // ⚠️ 注意：Leaflet 的坐標順序是 [緯度 Lat, 經度 Lng]，與 Mapbox 相反！
+    const map = L.map('map').setView([22.3193, 114.1694], 11); 
+
+    // 3. 載入免費的 OpenStreetMap 地圖街道圖層
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // 儲存用戶位置標記的變數
+    let userMarker = null;
+
+    // 4. 載入 eSUA 禁飛區 GeoJSON
+    function loadESUANoFlyZones() {
+        // 替換為實際的 eSUA GeoJSON 數據 URL 或你本地的 json 檔案
+        const esuaGeoJsonUrl = 'GeoJSON/map.geojson'; 
+
+        // 這裡用 fetch 去拿數據（此處以範例邏輯模擬，實際開發直接放入 URL）
+        fetch(esuaGeoJsonUrl)
+            .then(response => response.json())
+            .then(geojsonData => {
+                // 將 GeoJSON 渲染到 Leaflet 地圖上
+                L.geoJSON(geojsonData, {
+                    style: function (feature) {
+                        return {
+                            color: "#ff0000",      // 邊框顏色：紅色
+                            weight: 2,             // 邊框粗細
+                            fillColor: "#ff0000",  // 填充顏色
+                            fillOpacity: 0.50      // 透明度 50%
+                        };
+                    },
+                    onEachFeature: function (feature, layer) {
+                        // 點擊禁飛區時彈出提示
+                        const name = feature.properties.name || "eSUA 限制飛行區域";
+                        layer.bindPopup(`<b>禁飛區提示：</b><br>${name}`);
+                    }
+                }).addTo(map);
+            })
+            .catch(err => {
+                console.log("未能即時讀取 eSUA 網址（可能受 CORS 限制），建議下載成當地 json 檔載入。");
+                // 測試提示：你可以把官方 GeoJSON 下載儲存為 'esua.json' 放在同一個資料夾，然後 fetch('esua.json')
+            });
+    }
+
+    // 執行載入禁飛區
+    loadESUANoFlyZones();
+
+    // 5. HTML5 定位功能
+    function geolocateUser() {
+        if (!navigator.geolocation) {
+            alert("你的瀏覽器不支援定位功能。");
+            return;
+        }
+
+        document.querySelector('.locate-btn').innerText = "定位中...";
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+
+                // 地圖移到用戶位置
+                map.flyTo([lat, lng], 17);
+
+                // 更新或建立藍色定位點
+                if (userMarker) {
+                    userMarker.setLatLng([lat, lng]);
+                } else {
+                    // 自訂一個漂亮的藍色圓點 Marker
+                    const blueDot = L.divIcon({
+                        className: 'custom-div-icon',
+                        html: "<div style='background-color:#007aff; width:14px; height:14px; border-radius:50%; border:3px solid white; box-shadow:0 0 8px rgba(0,0,0,0.4);'></div>",
+                        iconSize: [20, 20],
+                        iconAnchor: [10, 10]
+                    });
+
+                    userMarker = L.marker([lat, lng], { icon: blueDot }).addTo(map);
+                }
+
+                document.querySelector('.locate-btn').innerText = " 🎯";
+            },
+            (error) => {
+                alert("定位失敗，請確保已開啟 GPS 權限。");
+                document.querySelector('.locate-btn').innerText = "我的位置 ";
+            },
+            { enableHighAccuracy: true, timeout: 5000 }
+        );
+    }
+    // 🌟 核心功能：並行抓取「高空天氣」與「太空港地磁 Kp 指數」
+// === 🌐 全球智能判別【邏輯修正版】：地圖點擊整合航空氣象 ===
+// ==========================================
+// 🛠️ 獨立工具函數 1：動態評估安全狀態 (模組化整理)
+// ==========================================
+function evaluateFlightSafety(windGround, wind80m, gust, rainAmount, rainProb, kpIndex, hasActiveWarning) {
+    // 🔴 紅燈條件：風速/陣風超標、落雨、天文台警告、或地磁風暴 (Kp >= 5)
+    if (windGround > 32 || wind80m > 40 || gust > 42 || rainAmount > 0 || kpIndex >= 5 || hasActiveWarning) {
+        return {
+            emoji: "🔴",
+            color: "#ef4444",
+            text: kpIndex >= 5 ? "危險！強烈地磁風暴 (Kp ≥ 5)，強烈干擾 GPS，嚴禁起飛！" : "危險！惡劣天氣、強風或降雨，嚴禁起飛。"
+        };
+    } 
+    // 🟡 黃燈條件：風力偏大、有降雨機率、或地磁活躍 (Kp >= 4)
+    else if (windGround > 18 || wind80m > 28 || gust > 30 || rainProb > 45 || kpIndex >= 4) {
+        return {
+            emoji: "🟡",
+            color: "#f59e0b",
+            text: kpIndex >= 4 ? "警告：地磁活躍 (Kp = 4) 或氣象不穩定，請謹慎飛行。" : "氣象不穩定、高空風大或有雨，請謹慎飛行。"
+        };
+    }
+    // 🟢 綠燈條件
+    return {
+        emoji: "🟢",
+        color: "#10b981",
+        text: "環境與地磁良好，適合飛行。"
+    };
+}
+
+// ==========================================
+// 🛠️ 獨立工具函數 2：解析香港天文台警告
+// ==========================================
+function parseHKOWarnings(warningData) {
+    if (!warningData || Object.keys(warningData).length === 0) {
+        return { hasWarning: false, html: `<div style="color: #10b981; font-weight: bold; font-size: 13px; margin-bottom: 10px;">🟢 天文台提示：目前無生效警告</div>` };
+    }
+    
+    let html = `<div style="margin-bottom: 10px; font-size: 13px; line-height: 1.4;"><span style="color: #e74c3c; font-weight: bold;">⚠️ 實時警告：</span>`;
+    for (const key in warningData) {
+        const warn = warningData[key];
+        let bgColor = "#f39c12"; 
+        let textColor = "#ffffff";
+        if (warn.name.includes("黃色")) { bgColor = "#f1c40f"; textColor = "#000000"; }
+        else if (warn.name.includes("紅色")) { bgColor = "#e74c3c"; textColor = "#ffffff"; }
+        else if (warn.name.includes("黑色")) { bgColor = "#1e1e24"; textColor = "#ffffff"; }
+        else if (warn.name.includes("雷暴") || warn.name.includes("季候風")) { bgColor = "#9b59b6"; textColor = "#ffffff"; }
+        
+        html += `<span style="background: ${bgColor}; color: ${textColor}; padding: 1px 5px; border-radius: 3px; font-size: 11px; font-weight: bold; display: inline-block; margin-right: 4px; margin-top: 2px;">${warn.name}</span>`;
+    }
+    html += `</div>`;
+    return { hasWarning: true, html: html };
+}
+
+// ==========================================
+// 🚀 主程式：地圖點擊事件
+// ==========================================
+map.on('click', function(e) {
+    const lat = e.latlng.lat;
+    const lon = e.latlng.lng;
+
+    // 🌟 [優化 2] 立即彈出 Loading 提示，改善用戶體驗
+    const loadingPopup = L.popup()
+        .setLatLng(e.latlng)
+        .setContent('<div style="padding: 10px; font-size: 13px; color: #555;"><span style="display:inline-block; animation: spin 1s linear infinite; margin-right: 8px;">⏳</span>正在分析航拍氣象與地磁數據...</div>')
+        .openOn(map);
+
+    // 🎯 地理圍欄判定
+    const isHongKong = (lat >= 22.14 && lat <= 22.57 && lon >= 113.80 && lon <= 114.44);
+
+    // 🌐 定義 3 個連線 Promises
+    const weatherPromise = fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation&hourly=wind_speed_80m,precipitation_probability&timezone=auto`).then(res => res.json());
+    
+    // 🌟 [優化 3] 接通美國 NOAA 官方實時地磁數據 API
+    const geoMagneticPromise = fetch('https://services.swpc.noaa.gov/products/noaa-scales.json')
+        .then(res => res.json())
+        .then(json => {
+            // 解析 NOAA 數據獲取當前實時 Kp 值 (預設若沒數據則為 0)
+            const kp = json && json[0] && json[0].geomagnetic ? parseInt(json[0].geomagnetic.kp) : 0;
+            return isNaN(kp) ? 0 : kp;
+        })
+        .catch(() => 0); // 出錯時降級為 0，確保主程式不崩潰
+
+    // 🌟 [優化 1] 加上 CORS 免費代理，解決天文台放上伺服器後的跨網域鎖死問題
+    const hkoUrl = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc';
+    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(hkoUrl);
+    
+    const warningPromise = isHongKong 
+        ? fetch(proxyUrl).then(res => res.json()).catch(() => ({}))
+        : Promise.resolve({});
+
+    // ⚡ 同步並行發送所有請求
+    Promise.all([weatherPromise, warningPromise, geoMagneticPromise])
+    .then(data => {
+        const weatherData = data[0];
+        const warningData = data[1];
+        const kpIndex = data[2]; // 🌟 實時地磁數值
+
+        // 數據解構與格式化
+        const rawTemp = weatherData.current.temperature_2m;
+        const rawWindGround = weatherData.current.wind_speed_10m;
+        const rawWind80m = weatherData.hourly.wind_speed_80m[0];
+        const rawGust = weatherData.current.wind_gusts_10m;
+        const rawRainAmount = weatherData.current.precipitation;
+        const rainProb = weatherData.hourly.precipitation_probability[0];
+
+        const temp = rawTemp.toFixed(1);
+        const windGround = rawWindGround.toFixed(1);
+        const wind80m = rawWind80m.toFixed(1);
+        const gust = rawGust.toFixed(1);
+        const rainAmount = rawRainAmount.toFixed(1);
+
+        // 🌟 [優化 4] 調用抽離後的工具函數，代碼極度乾淨
+        const hkoResult = isHongKong ? parseHKOWarnings(warningData) : { hasWarning: false, html: "" };
+        const safety = evaluateFlightSafety(rawWindGround, rawWind80m, rawGust, rawRainAmount, rainProb, kpIndex, hkoResult.hasWarning);
+
+        // 🎴 完美還原高級 UI
+        const popupContent = `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; min-width: 250px; padding: 5px 8px; line-height: 1.8; color: #333;">
+                
+                <div style="display: flex; align-items: center; margin-bottom: 5px;">
+                    <span style="font-size: 16px; margin-right: 6px;">📊</span>
+                    <span style="color: #007aff; font-weight: bold; font-size: 15px; letter-spacing: 0.5px;">綜合航拍安全報告</span>
+                </div>
+                
+                <div style="height: 2px; background-color: #007aff; margin-bottom: 10px;"></div>
+                
+                ${hkoResult.html}
+                
+                <div style="font-size: 14px;">
+                    <div>🌡️ <b>當地氣溫：</b>${temp} °C</div>
+                    <div>🍃 <b>地面風速：</b>${windGround} km/h</div>
+                    <div style="color: #1a73e8; font-weight: bold;">💨 高空風速 (80m)：${wind80m} km/h</div>
+                    <div style="color: #d97706; font-weight: bold;">🌪️ 實時陣風：${gust} km/h</div>
+                    <div style="color: #2563eb;">🌧️ <b>當前降雨：</b><b>${rainAmount} mm</b></div>
+                    <div style="color: #2563eb;">🎲 <b>降雨機率：</b><b>${rainProb} %</b></div>
+                    <div style="color: #7c3aed; font-weight: bold;">🛰️ 全球地磁指數：<span style="font-weight: normal; color: #555;">Kp ${kpIndex} (${kpIndex >= 5 ? '極度危險' : kpIndex >= 4 ? '活躍干擾' : '良好'})</span></div>
+                </div>
+                
+                <div style="margin-top: 8px; font-size: 14px; font-weight: bold; color: ${safety.color}; display: flex; align-items: center;">
+                    <span style="margin-right: 5px; font-size: 15px;">${safety.emoji}</span> 評估：${safety.text}
+                </div>
+                
+            </div>
+        `;
+
+        // 將原本的 Loading 彈窗內容直接替換更新
+        loadingPopup.setContent(popupContent);
+    })
+    .catch(err => {
+        console.error("數據獲取失敗:", err);
+        loadingPopup.setContent('<div style="padding:10px; color:#ef4444; font-weight:bold; font-size:13px;">❌ 航拍安全報告生成失敗</div>');
+    });
+});
+
+// 🌟 小貼士：為了讓 Loading 的 ⏳ 漏斗圖標會旋轉，你可以在 CSS 檔案加入這兩行，不加也完全沒影響：
+// @keyframes spin { 100% { transform: rotate(360deg); } }
+// 獨立工具：純粹獲取天文台警告文字
+async function getHKOOWarnings() {
+    try {
+        const res = await fetch('https://data.weather.gov.hk/weatherAPI/opendata/weather.php?dataType=warnsum&lang=tc');
+        const data = await res.json();
+        if (!data || Object.keys(data).length === 0) {
+            return "<span style='color:green; font-weight:bold;'>🟢 天文台提示：無生效警告</span><br><br>";
+        }
+        let text = "<span style='color:red; font-weight:bold;'>⚠️ 天文台警告：</span>";
+        for (const key in data) {
+            text += `<span style='background:#e74c3c; color:white; padding:2px 5px; border-radius:3px; font-size:11px; margin-right:3px;'>${data[key].name}</span>`;
+        }
+        return text + "<br><br>";
+    } catch (e) {
+        return "";
+    }
+}
+//3
+function geolocateUser() {
+    if (!navigator.geolocation) {
+        alert("閣下的瀏覽器不支援地理定位。");
+        return;
+    }
+    document.querySelector('.locate-btn').innerText = "定位中...";
+
+    navigator.geolocation.getCurrentPosition(
+        (position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
+            // 1. 地圖飛過去
+            map.flyTo([lat, lng], 17);
+
+            // 2. 更新或建立定位 Marker
+            if (userMarker) {
+                userMarker.setLatLng([lat, lng]);
+            } else {
+                const blueDotIcon = L.divIcon({
+                    className: 'user-gps-dot',
+                    html: "<div style='background-color:#007aff; width:14px; height:14px; border-radius:50%; border:3px solid white; box-shadow:0 0 10px rgba(0,0,0,0.4);'></div>",
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                });
+                userMarker = L.marker([lat, lng], { icon: blueDotIcon }).addTo(map);
+            }
+            document.querySelector('.locate-btn').innerText = "我的位置 ";
+            
+            // 3. 🌟 關鍵聯動：定位成功後，直接自動觸發該位置的天氣查詢
+            map.fireEvent('click', { latlng: L.latLng(lat, lng) });
+        },
+        (error) => {
+            alert("定位失敗，請確保已授予瀏覽器 GPS 位置權限。");
+            document.querySelector('.locate-btn').innerText = "我的位置 🎯";
+        },
+        { enableHighAccuracy: true, timeout: 6000 }
+    );
+}
+// === 新增：分頁切換邏輯 ===
+function switchTab(pageId) {
+    document.querySelectorAll('.tab-content').forEach(page => page.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    
+    document.getElementById(pageId).classList.add('active');
+    event.target.classList.add('active');
+
+    // 🌟 防止 Leaflet 地圖切換時變灰色或加載不全
+    if (pageId === 'map-page') {
+        setTimeout(() => { map.invalidateSize(); }, 100);
+    }
+}
+
+// === 新增：免費地點搜尋與天氣連動 ===
+function searchLocation() {
+    const query = document.getElementById('search-input').value;
+    if (!query) return;
+
+    const btn = document.querySelector('.search-btn');
+    btn.innerText = "🔍...";
+
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1`)
+        .then(res => res.json())
+        .then(results => {
+            if (results.length > 0) {
+                const lat = parseFloat(results[0].lat);
+                const lon = parseFloat(results[0].lon);
+
+                // 1. 地圖飛去新地點
+                map.flyTo([lat, lon], 18);
+
+                // 2. 🌟 自動觸發你之前寫落嘅完美雙 API 天氣機制
+                setTimeout(() => {
+                    map.fireEvent('click', { latlng: L.latLng(lat, lon) });
+                }, 800); 
+            } else {
+                alert("搵唔到呢個地方，請試試其他名。");
+            }
+            btn.innerText = "搜尋";
+        })
+        .catch(() => {
+            alert("搜尋出咗少少問題。");
+            btn.innerText = "搜尋";
+        });
+}
+
+// 支援撳 Enter 鍵直接搜尋
+document.getElementById('search-input').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') searchLocation();
+});
+// === 各國航拍法例資料庫 ===
+const droneLawsDatabase = {
+hk: {
+        title: "香港無人機法例 (民航處 CAD eSUA 標準操作限制)",
+        rules: [
+            "<b style='color:#e74c3c; font-size:15px;'>【📊 按重量劃分之飛行限制】</b><br>" +
+            "• <b>甲一類 (250g 或以下 / 如 DJI Mini 系列)：</b><br>" +
+            "  - 📏 高度上限：地面以上 <b>100 呎 (約 30 米)</b><br>" +
+            "  - ⚡ 速度上限：每小時 <b>20 公里</b><br>" +
+            "  - 📝 免無人機及操作員註冊，但仍須遵守禁飛區限制。<br>" +
+            "• <b>甲二類 (250g 以上至 7kg / 如 DJI Air, Mavic 系列)：</b><br>" +
+            "  - 📏 高度上限：地面以上 <b>300 呎 (約 90 米)</b><br>" +
+            "  - ⚡ 速度上限：每小時 <b>50 公里</b><br>" +
+            "  - 📝 機身須貼上註冊標籤，操作員須年滿 14 歲並實名註冊。",
+            
+            
+            "<b style='color:#f39c12; font-size:15px;'>【👁️ 核心安全紅線】</b><br>" +
+            "• <b>視線範圍 (VLOS)：</b> 必須保持肉眼可見，嚴禁盲飛。<br>" +
+            "• <b>安全距離：</b> 飛機與未參與操作的人員、車輛或建築物必須保持至少 <b>30 米</b> 橫向距離。<br>" +
+            "• <b>保險要求：</b> 乙類（7kg以上）或所有進階操作均<b>強制購買</b>至少港幣 1000 萬的第三者責任保險。",
+            
+            "<b style='color:#7f8c8d; font-size:15px;'>【⚠️ 違例最高罰則】</b><br>" +
+            "• 根據《小型無人機令》，一經定罪，最高可面臨<b>監禁 2 年</b>及<b>罰款港幣 10 萬元</b>。"
+        ]
+    },
+    jp: {
+        title: "日本無人機法例 (國土交通省 JCAB 航空法)",
+        rules: [
+            "<b style='color:#e74c3c; font-size:15px;'>【🚨 修正補漏：100g 超低註冊門檻】</b><br>" +
+            "• 日本的法律線是 <b>100g</b>，而非國際常見的 250g！外遊常用的 DJI Mini (249g) 在日本<b>屬於大型無人機</b>，必須強制在 DIPS 2.0 系統實名註冊並付費。<br>" +
+            "• <b>強制 Remote ID：</b> 航拍機必須內置或外掛 Remote ID 廣播晶片，起飛前需經藍牙/Wi-Fi 發射身份訊號，否則直接違法。",
+            
+            "<b style='color:#2980b9; font-size:15px;'>【🏙️ 城市盲區：DID 人口集中地區】</b><br>" +
+            "• 日本將所有城市與景點劃分為 <b>DID (Densely Inhabited Districts)</b> 區域。喺 DID 區域內，<b>不論重量（即使是 100g 飛機）未經事先申請全面禁飛</b>。全東京、大阪、京都、札幌市區幾乎 100% 都是禁飛區。<br>" +
+            "• 📏 許可空域高度上限為 <b>150 米</b>，且必須與人、車、建築保持 <b>30 米</b> 距離。",
+            
+            "<b style='color:#f39c12; font-size:15px;'>【❌ 旅客三大地雷】</b><br>" +
+            "• <b>嚴禁夜航與 FPV：</b> 除非有極難申請的國土交通大臣許可，否則日落後嚴禁起飛。戴 FPV 眼鏡飛行因違反「目視範圍(VLOS)」亦屬違法。<br>" +
+            "• <b>地方自治體法規：</b> 雖然中央法律允許部分綠區，但機迷要注意，日本所有「都立公園」及景區多數由地方立法全面禁飛無人機。",
+            
+            "<b style='color:#7f8c8d; font-size:15px;'>【⚠️ 違例最高罰則】</b><br>" +
+            "• 違反者最高可處 <b>50 萬日圓罰款</b>；若在機場周圍違飛或醉酒操作無人機，最高可處 <b>1 年監禁</b> 或 <b>30 萬日圓罰款</b>。"
+        ]
+    },
+    tw: {
+        title: "台灣無人機法例 (交通部民航局 CAA)",
+        rules: [
+            "<b style='color:#e74c3c; font-size:15px;'>【📝 修正補漏：個人與法人「雙軌制」】</b><br>" +
+            "• <b>個人操作 (自然人)：</b> 擁有重量 <b>250g 以上</b> 的無人機必須實名註冊。在綠區操作 2kg 以下飛機<b>不需要</b>考取操作證。<br>" +
+            "• <b>公司/媒體操作 (法人)：</b> 只要你是代表公司、頻道、學校或政府（不論無人機有多輕，哪怕是 100g），<b>操作員必須考取專業操作證</b>，且必須強制購買第三者責任險，每次飛行前都要申報核准！",
+            
+            "<b style='color:#2980b9; font-size:15px;'>【📐 飛行紅線與高度】</b><br>" +
+            "• 📏 飛行高度上限為 <b>400 呎 (約 120 米)</b>。<br>" +
+            "• 🗺️ 台灣嚴格區分紅區（禁飛）、黃區（限高60米）和綠區。出發前<b>必須下載官方「DroneMap」App</b> 查看，紅區未經申請絕對不能起飛。<br>" +
+            "• 👥 嚴禁在人群密集、集會遊行、高速公路、鐵路及捷運周邊上空操作。",
+            
+            "<b style='color:#f39c12; font-size:15px;'>【🌃 絕對不開放個人夜航】</b><br>" +
+            "• 台灣法律規定，個人（自然人）航拍<b>只能在日出至日落之間進行</b>。個人完全沒有申請夜航的渠道，晚上起飛即屬違法！",
+            
+            "<b style='color:#7f8c8d; font-size:15px;'>【⚠️ 違例最高罰則】</b><br>" +
+            "• 在紅區（禁飛區）或超高違規飛行，罰款由 <b>新台幣 30 萬元至 150 萬元</b> 起跳，情節嚴重者直接沒收無人機！"
+        ]
+    },
+    uk: {
+        title: "英國無人機法例 (Civil Aviation Authority CAA)",
+        rules: [
+            "<b style='color:#e74c3c; font-size:15px;'>【📸 修正補漏：有相機就要註冊費】</b><br>" +
+            "• 英國實施 DMARES 系統。<b>只要無人機帶有相機（不論多輕，即使是 249g Mini），擁有者就必須註冊 Operator ID</b> 並每年付費，號碼必須貼在機身。<br>" +
+            "• 飛機重量達 <b>250g 或以上</b>，操作員必須額外通過線上考試獲取 <b>Flyer ID</b>。",
+            
+            "<b style='color:#2980b9; font-size:15px;'>【💡 旅行者最大漏洞：A2 CofC 證照盲點】</b><br>" +
+            "• 英國將空域分為 A1, A2, A3 類別。外遊如果帶 DJI Air 或 Mavic 系列 (250g - 2kg)：<br>" +
+            "  - <b>若無特別證照：</b> 飛機會被強制歸類到 <b>A3 類別</b>，飛行時必須<b>遠離住宅、商業、工業或娛樂區至少 150 米</b>！換言之，喺市鎮或景點基本沒法起飛。<br>" +
+            "  - <b>解決方案：</b> 操作員必須額外考取英國 <b>A2 CofC (Certificate of Competency) 證照</b>，才可以解鎖 <b>A2 類別</b>，允許在建築區起飛，並保持 30 米近人距離。<br>" +
+            "• 📏 飛行高度上限為地面以上 <b>120 米 (400 呎)</b>。",
+            
+            "<b style='color:#f39c12; font-size:15px;'>【💂 嚴格禁飛區】</b><br>" +
+            "• 機場周邊設有 5 公里的 FRZ 禁飛保護區。此外，倫敦市中心大部分空域（如皇宮、政府機關上空）受到 Egland 限制令保護，基本全區禁飛。",
+            
+            "<b style='color:#7f8c8d; font-size:15px;'>【⚠️ 違例最高罰則】</b><br>" +
+            "• 違法情節嚴重（如危及民航客機安全），可面臨<b>無限額罰款</b>及最高<b>監禁 5 年</b>。"
+        ]
+    }
+};
+
+// 🌟 智能容錯版顯示函數（自動配對任何新舊 HTML ID）
+function showDroneLaws() {
+    const country = document.getElementById('country-select').value;
+    
+    // 💡 核心安全機制：同時兼容 laws-display 和 laws-content 兩個 ID
+    let displayDiv = document.getElementById('laws-display');
+    if (!displayDiv) displayDiv = document.getElementById('laws-content');
+    
+    if (!displayDiv) {
+        console.error("錯誤：網頁中找不到可用於顯示法例的 HTML 容器（#laws-display 或 #laws-content）");
+        return;
+    }
+    
+    // 未選擇國家時，還原提示字眼
+    if (!country) {
+        displayDiv.innerHTML = "（請選擇國家查看詳細內容）";
+        displayDiv.style.borderLeft = "5px solid #ccc";
+        displayDiv.style.background = "#f8f9fa";
+        displayDiv.style.display = 'block';
+        return;
+    }
+    
+    const data = droneLawsDatabase[country];
+    
+    // 美化外框與排版
+    displayDiv.style.background = "#ffffff";
+    displayDiv.style.borderLeft = "5px solid #007aff";
+    displayDiv.style.padding = "20px";
+    displayDiv.style.borderRadius = "8px";
+    displayDiv.style.boxShadow = "0 4px 15px rgba(0,0,0,0.08)";
+    displayDiv.style.display = 'block';
+
+    // 建立 HTML 內容
+    let htmlContent = `<h3 style='margin-top:0; color:#1c1c1e; font-size:18px; border-bottom:2px solid #007aff; padding-bottom:8px; margin-bottom:15px;'>${data.title}</h3>`;
+    
+    // 將每條法例包裝成獨立精美的卡片樣式
+    data.rules.forEach(rule => {
+        htmlContent += `
+            <div style='background:#f8f9fa; border:1px solid #eaeaea; border-radius:6px; padding:12px 15px; margin-bottom:12px; line-height:1.6; color:#333; font-size:14px;'>
+                ${rule}
+            </div>
+        `;
+    });
+    
+    displayDiv.innerHTML = htmlContent;
+}
+// ==========================================
+// 🔍 關鍵字自動建議功能 (Search Autocomplete)
+// ==========================================
+let debounceTimer;
+const searchInput = document.getElementById('iti-search-input');
+const suggestionsBox = document.getElementById('suggestions-box');
+
+if (searchInput) {
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const query = this.value.trim();
+        
+        // 字數太少就收埋個選單
+        if (query.length < 2) {
+            suggestionsBox.hidden = true;
+            return;
+        }
+
+        // ⏱️ Debounce 機制：停手 350ms 後才呼叫 API
+        debounceTimer = setTimeout(() => {
+            // 使用 Photon API，並鎖定香港中心經緯度 (lon=114.16, lat=22.32) 優先排序相關結果
+            const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&lon=114.16&lat=22.32&limit=6`;
+            
+            fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                suggestionsBox.innerHTML = ''; // 清空舊資料
+                
+                if (!data.features || data.features.length === 0) {
+                    suggestionsBox.hidden = true;
+                    return;
+                }
+
+                // 產生下拉選單項目
+                data.features.forEach(feature => {
+                    const props = feature.properties;
+                    const coords = feature.geometry.coordinates; // [經度 lon, 緯度 lat]
+                    
+                    // 友善地名人道組合 (過濾走 undefined 嘅部分)
+                    const name = props.name || '';
+                    const district = props.district || props.city || '';
+                    const displayName = district && district !== name ? `${name} (${district})` : name;
+
+                    const item = document.createElement('div');
+                    item.className = 'suggestion-item';
+                    item.innerText = displayName;
+                    
+                    // 🖱️ 當飛友點擊下拉選單入面嘅地方
+                    item.addEventListener('click', () => {
+                        searchInput.value = name; // 將選中嘅名填入框
+                        suggestionsBox.hidden = true; // 收起選單
+                        
+                        const targetDate = document.getElementById('iti-date-input').value;
+                        if (!targetDate) {
+                            alert("請先選擇預定的出發日期，再選擇地點！");
+                            return;
+                        }
+                        
+                        // 1. 直接將呢個地方塞入行程表格並抓天氣 (呼叫你原本寫好個 Function)
+                        fetchWeatherAndInsert(name, coords[1], coords[0], targetDate);
+                        
+                        // 2. 🛩️ 畫面自體動態「飛去」地圖對應坐標點，方便視覺確認
+                        if (itineraryMap) {
+                            itineraryMap.flyTo([coords[1], coords[0]], 14, { animate: true, duration: 1.5 });
+                        }
+                    });
+                    
+                    suggestionsBox.appendChild(item);
+                });
+                
+                suggestionsBox.hidden = false; // 顯示選單
+            })
+            .catch(err => console.error("搜尋建議出錯:", err));
+        }, 350);
+    });
+}
+
+// 💡 貼心體驗：當用家點擊網頁其他任何地方，自動收埋下拉選單
+document.addEventListener('click', function(e) {
+    if (searchInput && e.target !== searchInput && e.target !== suggestionsBox) {
+        suggestionsBox.hidden = true;
+    }
+});
+</script>
+</body>
+</html>

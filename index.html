@@ -31,9 +31,9 @@
         <button class="tab-btn active" onclick="switchTab('map-page')">航拍地圖</button>
         <button class="tab-btn" onclick="switchTab('laws-page')">各國法例</button>
         <button class="tab-btn" onclick="switchTab('itinerary-page')">行程天氣</button>
+        <button class="tab-btn" onclick="switchTab('download-page')">下載應用程式</button>
     </div>
 </div>
-
 <div id="map-page" class="tab-content active">
     <div class="search-container">
         <input type="text" id="search-input" class="search-input" placeholder="輸入地點">
@@ -43,7 +43,18 @@
     <div id="map"></div>
     <div class="locate-btn" onclick="geolocateUser()">我的位置📍</div>
 </div>
-
+<div id="download-page" class="tab-content placeholder-page">
+    <h1>下載此應用程式</h1>
+    <h2>電腦版:</h2>
+    <img src="Screen Shot 2026-07-02 at 01.26.31.213 AM.png" style="display: counter;height: 400px;width: 800px;">
+    <img src="Screen Shot 2026-07-02 at 01.27.53.975 AM.png" style="display: flex;height: fit-content;width: fit-content;">
+    <img src="Screen Shot 2026-07-02 at 01.34.05.806 AM.png" style="display: flex;height: 400px;width: 800px;">
+    <h2>ios版:</h2>
+    <img src="IMG_0773.jpeg" style="display: flex;height: 200px;width:311.95px;">
+    <img src="IMG_0774.jpeg" style="display: flex;height: 200px;width:311.95px;">
+    <img src="IMG_0775.jpeg" style="display: flex;height: 300px;width: 200px;">
+    <div id="download-display" style="background: #f8f9fa;border-left: 5px solid #007aff; padding: 20px; border-radius: 0 8px 8px 0;line-height:1.7;display: none; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+</div>
 <div id="laws-page" class="tab-content placeholder-page">
     <h2 style="color: #007aff; margin-bottom: 15px; margin-top: 0;">📜 各國航拍法例快速對照</h2>
     <p style="color: #666; font-size: 14px;">出發外遊航拍前，請先選擇國家或地區查看當地基本核心法規：</p>

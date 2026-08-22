@@ -1,0 +1,18 @@
+{
+  "name": "Drone weather",
+  "short_name": "Drone",
+  "description": "航拍天氣預報",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#f4f6f9",
+  "theme_color": "#007aff",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "drone-stormy-weather-challenging-operations-vector-design-generative-ai-flat-style-icon-flying-clouds-390208820.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
